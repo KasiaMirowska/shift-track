@@ -6,17 +6,16 @@ export default function MainHeader() {
   return (
     <header className={classes.header}>
       <Link className={classes.logo} href="/">
-        {/* <Image src={logo} alt="plate of food" priority /> */}
         Shift Track
       </Link>
       <nav className={classes.nav}>
         <ul>
           <li>
-            <NavLink href="/searchSubject">Search</NavLink>
+            <NavLink href="/search-subject">Search</NavLink>
           </li>
 
           <li>
-            <NavLink href="/subjectList">Subject List</NavLink>
+            <NavLink href="/subject-list">Subject List</NavLink>
           </li>
         </ul>
       </nav>

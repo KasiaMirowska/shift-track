@@ -1,4 +1,4 @@
-import SearchForm from "@/components/content/searchForm";
+import SearchForm from "components/content/searchForm";
 
 export default function SearchSubjectPage() {
   const isPending = false; //add a state hook later
