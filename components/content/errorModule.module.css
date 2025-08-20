@@ -1,0 +1,34 @@
+/* Overlay toast */
+.errorToast {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(840px, calc(100% - 32px));
+  background: #fee;
+  border: 1px solid #c00;
+  color: #900;
+  padding: 12px 40px 12px 12px;
+  border-radius: 8px;
+  z-index: 1000;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+}
+
+.errorText {
+  margin: 0;
+}
+
+.dismissButton {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: #900;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.withToastPadding {
+  padding-top: 88px;
+}

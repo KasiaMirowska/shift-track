@@ -29,13 +29,15 @@ export type PublicationMetrics = InferInsertModel<typeof publicationMetrics>;
 
 // …repeat as needed for other tables
 
-export const SUBJECT_TYPES = [
-  "PERSON",
-  "ORGANIZATION",
-  "POLICY",
-  "TOPIC",
-] as const;
+export enum SUBJECT_TYPES {
+  person = "PERSON",
+  organization = "ORGANIZATION",
+  policy = "POLICY",
+  topic = "TOPIC",
+}
 
 export interface SlugParams {
   slug: string;
 }
+
+export type CreateSubjectState = { ok: true } | { ok: false; error?: string };

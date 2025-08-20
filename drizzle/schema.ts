@@ -49,7 +49,7 @@ export const subjects = pgTable(
       .notNull(),
   },
   (t) => ({
-    uniques: () => [unique("name_type").on(t.name, t.type)],
+    nameTypeUnique: unique("name_type").on(t.name, t.type),
   })
 );
 

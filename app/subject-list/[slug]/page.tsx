@@ -12,7 +12,22 @@ export default async function SubjectSlugPage({
 }) {
   const { slug } = await params;
 
-  const detailedSubjectData = await getSubjectDetailBySlug(slug);
-  console.log("DDDD", detailedSubjectData);
-  return <div>{slug}</div>;
+  const { name, type, updatedAt, opinions, sources, watches } =
+    await getSubjectDetailBySlug(slug);
+  const test = sources;
+  console.log(sources, opinions, watches);
+  return (
+    <div>
+      <h2>{name}</h2>
+      <span>type: {type}. </span>
+      <span>updatedAt: {updatedAt.toISOString()}</span>
+      {opinions.map((o) => (
+        <>
+          <p>{o.summary}</p>
+          <p>{o.sentiment}</p>
+          <p>{o.quote}</p>
+        </>
+      ))}
+    </div>
+  );
 }
