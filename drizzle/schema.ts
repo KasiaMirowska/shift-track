@@ -8,6 +8,7 @@ import {
   unique,
   index,
   pgEnum,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { relations } from "drizzle-orm";
@@ -61,7 +62,7 @@ export const subjectWatches = pgTable(
       .default(sql`gen_random_uuid()`),
     subjectId: text("subject_id")
       .notNull()
-      .references(() => subjects.id),
+      .references(() => subjects.id, { onDelete: "cascade" }),
     query: text("query").notNull(),
     enabled: boolean("enabled").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -116,7 +117,7 @@ export const sources = pgTable(
     id: text("id")
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    url: text("url").notNull().unique(),
+    url: text("url").notNull(),
     title: text("title").notNull(),
     publicationId: text("publication_id").references(() => publications.id),
     published: timestamp("published", { withTimezone: true }).notNull(),
@@ -127,31 +128,37 @@ export const sources = pgTable(
     excerpt: text("excerpt"),
     summary: text("summary"),
     sentiment: real("sentiment"),
-    textHash: text("text_hash").unique(),
+    textHash: text("text_hash"),
     wordCount: integer("word_count"),
+    author: text("author"),
+    html: text("html"),
+    section: text("section"),
+    language: text("language"),
   },
   (t) => ({
-    indexes: () => [
-      index("sources_published_idx").on(t.published),
-      index("sources_pub_date_idx").on(t.publicationId, t.published),
-    ],
+    urlUnique: uniqueIndex("sources_url_unique").on(t.url),
+    textHashUnique: uniqueIndex("sources_text_hash_unique").on(t.textHash),
   })
 );
 
-export const subjectSources = pgTable("subject_sources", {
-  id: text("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  subjectId: text("subject_id")
-    .notNull()
-    .references(() => subjects.id, { onDelete: "cascade" }),
-  sourceId: text("source_id")
-    .notNull()
-    .references(() => sources.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const subjectSources = pgTable(
+  "subject_sources",
+  {
+    subjectId: text("subject_id")
+      .notNull()
+      .references(() => subjects.id, { onDelete: "cascade" }),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    // matches your DB-level UNIQUE(subject_id, source_id)
+    uniq: uniqueIndex("subject_sources_uniq").on(t.subjectId, t.sourceId),
+  })
+);
 
 export const articleTexts = pgTable("article_texts", {
   sourceId: text("source_id")
@@ -195,16 +202,21 @@ export const ingestionEvents = pgTable(
     id: text("id")
       .primaryKey()
       .default(sql`gen_random_uuid()`),
+
     sourceUrl: text("source_url").notNull(),
     status: text("status").notNull(),
     detail: text("detail"),
-    durationMs: integer("duration_ms"),
+    sourceId: text("source_id").references(() => sources.id, {
+      onDelete: "set null",
+    }),
+
+    // Timestamp for the event (you referenced this in your index)
     occurredAt: timestamp("occurred_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
-    sourceId: text("source_id").references(() => sources.id),
   },
   (t) => ({
+    // keep the same "indexes: () => []" style you used elsewhere
     indexes: () => [
       index("ingestion_events_occurred_idx").on(t.occurredAt),
       index("ingestion_events_source_url_idx").on(t.sourceUrl),

@@ -41,3 +41,28 @@ export interface SlugParams {
 }
 
 export type CreateSubjectState = { ok: true } | { ok: false; error?: string };
+
+export type NormalizedArticle = {
+  url: string;
+  title: string;
+  published: Date; // <-- matches DB
+  publicationSlug?: string | null; // optional FK
+  excerpt?: string | null;
+  summary?: string | null;
+  author?: string | null;
+  html?: string | null;
+  section?: string | null;
+  language?: string | null;
+  externalId?: string | null;
+  raw?: unknown;
+};
+
+export type Candidate = { item: NormalizedArticle; subjectIds: string[] };
+
+export interface NewsSourceAdapter {
+  id: string;
+  fetchBatch(): Promise<NormalizedArticle[]>;
+}
+
+export type FeedSection = "top" | "politics" | "science" | "culture";
+export type PubHints = { slug: string; name?: string; domain?: string };

@@ -109,3 +109,15 @@ ALTER TABLE "subject_feeds" ADD CONSTRAINT "subject_feeds_watch_id_subject_watch
 ALTER TABLE "subject_sources" ADD CONSTRAINT "subject_sources_subject_id_subjects_id_fk" FOREIGN KEY ("subject_id") REFERENCES "public"."subjects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "subject_sources" ADD CONSTRAINT "subject_sources_source_id_sources_id_fk" FOREIGN KEY ("source_id") REFERENCES "public"."sources"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "subject_watches" ADD CONSTRAINT "subject_watches_subject_id_subjects_id_fk" FOREIGN KEY ("subject_id") REFERENCES "public"."subjects"("id") ON DELETE no action ON UPDATE no action;
+ALTER TABLE "sources" ADD COLUMN "author"   text;
+ALTER TABLE "sources" ADD COLUMN "html"     text;
+ALTER TABLE "sources" ADD COLUMN "section"  text;
+ALTER TABLE "sources" ADD COLUMN "language" text;
+ALTER TABLE "subject_sources"
+ADD CONSTRAINT "subject_sources_uniq" UNIQUE ("subject_id", "source_id");
+CREATE INDEX IF NOT EXISTS "sources_published_idx"     ON "sources" ("published");
+CREATE INDEX IF NOT EXISTS "sources_pub_date_idx"      ON "sources" ("publication_id", "published");
+CREATE INDEX IF NOT EXISTS "ingestion_events_occurred_idx"    ON "ingestion_events" ("occurred_at");
+CREATE INDEX IF NOT EXISTS "ingestion_events_source_url_idx"  ON "ingestion_events" ("source_url");
+
+
