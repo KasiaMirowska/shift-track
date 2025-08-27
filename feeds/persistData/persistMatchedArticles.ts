@@ -2,7 +2,13 @@ import { sql } from "drizzle-orm";
 import { db } from "drizzle/db";
 import { ingestionEvents, sources, subjectSources } from "drizzle/schema";
 import { normalizeUrl } from "feeds/persistData/utils/normalizeUrl";
-import type { Candidate, NormalizedArticle, PubHints } from "lib/types";
+import type {
+  Candidate,
+  HydratorTarget,
+  NormalizedArticle,
+  PersistedRecord,
+  PubHints,
+} from "lib/types";
 import {
   derivedPublicationFromUrl,
   ensurePublicationInDB,
@@ -17,10 +23,11 @@ const squash = (s?: string | null): string =>
 export default async function persistMatchedArticles(
   adapterId: string,
   items: NormalizedArticle[]
-) {
+): Promise<PersistedRecord> {
   console.log("[persistMatchedArticles] using file:", __filename);
 
-  if (!items.length) return { fetched: 0, kept: 0, inserted: 0, linked: 0 };
+  if (!items.length)
+    return { fetched: 0, kept: 0, inserted: 0, linked: 0, hydrateTargets: [] };
 
   // 1) Load enabled watches once (OK to do outside tx)
   let watches: {
@@ -59,7 +66,7 @@ export default async function persistMatchedArticles(
     if (subjectIds.length) candidates.push({ item: i, subjectIds });
   }
   if (!candidates.length) {
-    return { fetched: 0, kept: 0, inserted: 0, linked: 0 };
+    return { fetched: 0, kept: 0, inserted: 0, linked: 0, hydrateTargets: [] };
   }
 
   // 3) Do all DB writes atomically
@@ -141,7 +148,7 @@ export default async function persistMatchedArticles(
       where: (s, { inArray }) => inArray(s.url, needUrls),
       columns: { id: true, url: true },
     });
-    const idByUrl = new Map(idRows.map((r) => [r.url, r.id]));
+    const idByUrl = new Map(idRows.map((r: HydratorTarget) => [r.url, r.id]));
 
     // 3c) Link candidates to sources (dedupe subjectId:sourceId pairs)
     const pairs = candidates.flatMap((c) => {
@@ -245,11 +252,27 @@ export default async function persistMatchedArticles(
       await tx.insert(ingestionEvents).values(events);
     }
 
+    //find which of these sources still have NO full text
+    const sourceIdsInDB = idRows.map((r) => r.id);
+    const haveText = new Set(
+      (
+        await tx.query.articleTexts.findMany({
+          where: (t, { inArray }) => inArray(t.sourceId, sourceIdsInDB),
+          columns: { sourceId: true },
+        })
+      ).map((r) => r.sourceId)
+    );
+
+    const hydrateTargets = idRows
+      .filter((r: HydratorTarget) => !haveText.has(r.id))
+      .map((r: HydratorTarget) => ({ id: r.id, url: r.url }));
+
     return {
       fetched: items.length,
       kept: candidates.length,
       inserted: inserted.length,
       linked: uniqPairs.length,
+      hydrateTargets,
     };
   });
 }

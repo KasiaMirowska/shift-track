@@ -165,6 +165,7 @@ export const articleTexts = pgTable("article_texts", {
     .primaryKey()
     .references(() => sources.id),
   text: text("text").notNull(),
+  html: text("html"),
 });
 
 export const opinions = pgTable(

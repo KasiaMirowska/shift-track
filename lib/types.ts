@@ -64,5 +64,15 @@ export interface NewsSourceAdapter {
   fetchBatch(): Promise<NormalizedArticle[]>;
 }
 
+export interface PersistedRecord {
+  fetched: number;
+  kept: number;
+  inserted: number;
+  linked: number;
+  hydrateTargets: HydratorTarget[];
+}
+
 export type FeedSection = "top" | "politics" | "science" | "culture";
 export type PubHints = { slug: string; name?: string; domain?: string };
+
+export type HydratorTarget = { id: string; url: string };
