@@ -8,8 +8,9 @@ export default async function runHydratorOnce(
   fallbackLimit = 15
 ) {
   let batch = targets;
-
+  console.log("IN HADRATOR.batch", batch);
   if (!batch || !batch.length) {
+    console.log("IN HADRATOR.getting batch from db", batch);
     const rows = await db.execute(sql/*sql*/ `
             SELECT s.id , s.url
             FROM sources s
@@ -19,12 +20,12 @@ export default async function runHydratorOnce(
             LIMIT ${fallbackLimit}`);
     batch = rows?.rows as Array<{ id: string; url: string }>;
   }
-
+  console.log("IN HADRATOR.batch ", batch);
   for (const row of batch) {
     try {
       await hydrateSource(row.id, row.url);
-    } catch (e) {
-      console.error("HydrateOnce failed", row.id, row.url);
+    } catch (e: any) {
+      console.error("HydrateOnce failed", row.id, row.url, e?.message ?? e);
     }
   }
 }

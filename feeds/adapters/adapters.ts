@@ -1,4 +1,3 @@
-// adapters/rssAdapters.ts
 import type {
   FeedSection,
   NewsSourceAdapter,
@@ -88,8 +87,9 @@ export function makeGuardianApiAdapter(
     fromDate,
     toDate,
   } = opts;
-
+  console.log("GOT INTO GUARDIAN");
   if (!apiKey) {
+    console.log("MISSING KEY FOR GUARDIAN");
     throw new Error("Guardian API adapter requires an apiKey");
   }
 

@@ -1,4 +1,4 @@
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import crypto from "node:crypto";
 import { db } from "drizzle/db";
@@ -6,19 +6,85 @@ import { articleTexts, sources } from "drizzle/schema";
 import { eq } from "drizzle-orm";
 import { naiveSentimentWithNegation } from "./naiveSentiment";
 
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36";
+//stripping the feed of styles
+function stripStylesheets(html: string) {
+  const noStyleTags = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+  const noLinkSheets = noStyleTags.replace(
+    /<link[^>]+rel=["']?stylesheet["']?[^>]*>/gi,
+    ""
+  );
+  return noLinkSheets;
+}
+
+function toAmpVariant(u: string): string | null {
+  try {
+    const url = new URL(u);
+    // If it already ends with /amp, leave it
+    if (url.pathname.endsWith("/amp")) return null;
+    // NPR & many publishers serve /amp
+    url.pathname = url.pathname.replace(/\/?$/, "/amp");
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchHtmlWithFallback(u: string, ua: string): Promise<string> {
+  try {
+    const res = await fetch(u, {
+      headers: { "User-Agent": ua, Accept: "text/html,*/*" },
+      signal: AbortSignal.timeout(40_000),
+      redirect: "follow",
+    });
+    if (!res.ok) throw new Error(`Fetch ${res.status}`);
+    return await res.text();
+  } catch (err) {
+    // Only retry on timeout or abort
+    const isAbort =
+      (err as any)?.name === "AbortError" ||
+      String(err).toLowerCase().includes("aborted") ||
+      String(err).toLowerCase().includes("timeout");
+    const amp = isAbort ? toAmpVariant(u) : null;
+    if (amp) {
+      console.warn("[hydrate] primary fetch timed out; retrying AMP:", amp);
+      const res2 = await fetch(amp, {
+        headers: { "User-Agent": ua, Accept: "text/html,*/*" },
+        signal: AbortSignal.timeout(40_000),
+        redirect: "follow",
+      });
+      if (!res2.ok) throw new Error(`Fetch AMP ${res2.status}`);
+      return await res2.text();
+    }
+    throw err;
+  }
+}
+
 export default async function hydrateSource(sourceId: string, url: string) {
-  const res = await fetch(url, {
-    headers: { "User-Agent": "ShiftTrackBot/1.0" },
+  console.log("[hydrate] start", sourceId, url);
+  const UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36";
+
+  const rawHtml = await fetchHtmlWithFallback(url, UA);
+
+  const vc = new VirtualConsole();
+  // Silence noisy css parse logs (we still get thrown errors which we catch)
+  vc.on("jsdomError", () => {
+    /* ignore css warnings */
   });
-  if (!res.ok) throw new Error(`Fetch ${res.status}`);
 
-  const html = await res.text();
+  let doc: JSDOM;
+  try {
+    doc = new JSDOM(rawHtml, { url, virtualConsole: vc });
+  } catch {
+    const cleaned = stripStylesheets(rawHtml);
+    doc = new JSDOM(cleaned, { url, virtualConsole: vc });
+  }
 
-  const doc = new JSDOM(html, { url });
   const reader = new Readability(doc.window.document);
   const parsed = reader.parse();
 
-  // hydrateSource.ts (core of the update part)
   const text = (parsed?.textContent ?? "").trim();
   if (!text) throw new Error("no text extracted");
 
@@ -58,5 +124,11 @@ export default async function hydrateSource(sourceId: string, url: string) {
     if (!existing?.excerpt) updates.excerpt = makeExcerpt(text);
 
     await tx.update(sources).set(updates).where(eq(sources.id, sourceId));
+
+    console.log("HYDRATION SAVED", sourceId, {
+      wordCount,
+      hasHtml: !!contentHtml,
+      byline: !!byline,
+    });
   });
 }

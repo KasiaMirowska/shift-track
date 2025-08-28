@@ -1,3 +1,4 @@
+import { logStep } from "feeds/utils/printActiveHandles";
 import {
   makeBbcAdapter,
   makeNprAdapter,
@@ -42,7 +43,10 @@ export function makeRssAdapterFactory(opts: {
       id: `${opts.idPrefix}-${section}-rss`,
       async fetchBatch(): Promise<NormalizedArticle[]> {
         const parser = new Parser<RssItem>();
-        const feed = await parser.parseURL(FEED_URL);
+        console.log(" parse start", FEED_URL);
+        const feed = await logStep(" parse stop", parser.parseURL(FEED_URL)); // or your fetch+parse
+        console.log("[bbc-top] parse done. items=", feed.items?.length);
+        // const feed = await parser.parseURL(FEED_URL);
         return (feed.items ?? [])
           .filter(hasLinkAndTitle)
           .map<NormalizedArticle>((i) => ({

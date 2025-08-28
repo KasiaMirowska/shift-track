@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "drizzle/db";
 import { ingestionEvents, sources, subjectSources } from "drizzle/schema";
-import { normalizeUrl } from "feeds/persistData/utils/normalizeUrl";
+import { normalizeUrl } from "feeds/utils/normalizeUrl";
 import type {
   Candidate,
   HydratorTarget,
@@ -12,7 +12,7 @@ import type {
 import {
   derivedPublicationFromUrl,
   ensurePublicationInDB,
-} from "./utils/publications";
+} from "../utils/publications";
 
 const squash = (s?: string | null): string =>
   (s ?? "")
