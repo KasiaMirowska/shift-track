@@ -70,10 +70,62 @@ export const subjectWatches = pgTable(
       .notNull(),
   },
   (t) => ({
-    indexes: () => [index("subject_watches_subject_idx").on(t.subjectId)],
+    subjectIdx: index("subject_watches_subject_idx").on(t.subjectId),
+    uniqPerSubjectQuery: unique("subject_watches_subject_query_uniq").on(
+      t.subjectId,
+      t.query
+    ),
   })
 );
 
+export const feeds = pgTable(
+  "feeds",
+  {
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    publicationId: text("publication_id").references(() => publications.id),
+    // For RSS/Atom, this is the real URL; for API feeds, store the endpoint path
+    url: text("url").notNull().unique(),
+    title: text("title"),
+    description: text("description"),
+    section: text("section"), // "news" | "politics" | "science" | "culture" ...
+    lang: text("lang"), // "en", "es", ...
+    region: text("region"), // "US", "EU", ...
+    type: text("type")
+      .notNull()
+      .$type<"rss" | "atom" | "api" | "scraper">()
+      .default("rss"),
+    adapterKey: text("adapter_key"), // e.g., "guardian-api"
+    paramsJson: text("params_json"), // JSON.stringify of adapter params (optional)
+    qualityScore: real("quality_score").default(0),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    urlIdx: index("feeds_url_idx").on(t.url),
+    pubIdx: index("feeds_publication_idx").on(t.publicationId),
+    sectionIdx: index("feeds_section_idx").on(t.section),
+  })
+);
+
+// --- NEW: tags
+export const feedTags = pgTable(
+  "feed_tags",
+  {
+    feedId: text("feed_id")
+      .notNull()
+      .references(() => feeds.id),
+    tag: text("tag").notNull(),
+  },
+  (t) => ({
+    uniq: unique("feed_tag_uniq").on(t.feedId, t.tag),
+  })
+);
+
+// subject_feeds (normalize url -> feedId)
 export const subjectFeeds = pgTable(
   "subject_feeds",
   {
@@ -83,13 +135,20 @@ export const subjectFeeds = pgTable(
     watchId: text("watch_id")
       .notNull()
       .references(() => subjectWatches.id),
-    url: text("url").notNull(),
+    feedId: text("feed_id")
+      .notNull()
+      .references(() => feeds.id),
+    enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (t) => ({
-    uniques: () => [unique("subject_feeds_watch_url").on(t.watchId, t.url)],
+    watchFeedUnique: unique("subject_watch_feed_uniq").on(t.watchId, t.feedId),
+
+    // regular indexes
+    watchIdx: index("subject_feeds_watch_idx").on(t.watchId),
+    feedIdx: index("subject_feeds_feed_idx").on(t.feedId),
   })
 );
 
@@ -291,6 +350,11 @@ export const subjectFeedsRelations = relations(subjectFeeds, ({ one }) => ({
     fields: [subjectFeeds.watchId],
     references: [subjectWatches.id],
   }),
+  // NEW: link to feeds so we can eager-load real feed rows
+  feed: one(feeds, {
+    fields: [subjectFeeds.feedId],
+    references: [feeds.id],
+  }),
 }));
 
 // SOURCES
@@ -305,4 +369,22 @@ export const sourcesRelations = relations(sources, ({ one, many }) => ({
     references: [articleTexts.sourceId],
   }),
   opinions: many(opinions),
+}));
+
+// (optional) FEEDS relations if you want publication/tags on each feed
+export const feedsRelations = relations(feeds, ({ one, many }) => ({
+  publication: one(publications, {
+    fields: [feeds.publicationId],
+    references: [publications.id],
+  }),
+  subjectLinks: many(subjectFeeds), // optional but fine to keep
+  // tags: many(feedTags),           // optional
+}));
+
+// (optional) FEED TAGS relation
+export const feedTagsRelations = relations(feedTags, ({ one }) => ({
+  feed: one(feeds, {
+    fields: [feedTags.feedId],
+    references: [feeds.id],
+  }),
 }));

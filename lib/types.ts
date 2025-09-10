@@ -27,8 +27,6 @@ export type Opinions = InferInsertModel<typeof opinions>;
 export type IngestionEvents = InferInsertModel<typeof ingestionEvents>;
 export type PublicationMetrics = InferInsertModel<typeof publicationMetrics>;
 
-// …repeat as needed for other tables
-
 export enum SUBJECT_TYPES {
   person = "PERSON",
   organization = "ORGANIZATION",
@@ -72,7 +70,23 @@ export interface PersistedRecord {
   hydrateTargets: HydratorTarget[];
 }
 
-export type FeedSection = "top" | "politics" | "science" | "culture";
+export type FeedSection = "news" | "politics" | "science" | "culture";
 export type PubHints = { slug: string; name?: string; domain?: string };
 
 export type HydratorTarget = { id: string; url: string };
+
+type FeedRow = {
+  id: string;
+  url: string;
+  type: "rss" | "atom" | "api" | "scraper";
+  adapterKey: string | null;
+  section: string | null;
+  publicationSlug: string | null;
+  paramsJson: string | null;
+};
+
+export type DetailLimits = {
+  opinionsLimit?: number;
+  articlesLimit?: number;
+  feedsPerWatchLimit?: number;
+};

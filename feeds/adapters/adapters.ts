@@ -2,16 +2,80 @@ import type {
   FeedSection,
   NewsSourceAdapter,
   NormalizedArticle,
-} from "../../lib/types";
-import { makeRssAdapterFactory } from ".";
+} from "lib/types";
+import Parser from "rss-parser";
+
+/**
+ * Sections we support:
+ *   FeedSection = "news" | "politics" | "science" | "culture"
+ * For Guardian API, "news" maps to their "world" endpoint as a reasonable default.
+ */
+
+type RssItem = {
+  guid?: string;
+  link?: string;
+  title?: string;
+  contentSnippet?: string;
+  content?: string;
+  isoDate?: string;
+  creator?: string;
+};
+
+const sectionToNormalized = (s: FeedSection) => s ?? "news";
+
+function hasLinkAndTitle(
+  i: RssItem
+): i is RssItem & { link: string; title: string } {
+  return typeof i.link === "string" && typeof i.title === "string";
+}
+
+/* ---------- Generic RSS adapter factory ---------- */
+
+export function makeRssAdapterFactory(opts: {
+  publicationSlug: string; // "bbc" | "npr" | "guardian"
+  idPrefix: string; // "bbc" | "npr" | "guardian"
+  feedUrlFor: (section: FeedSection) => string;
+  getAuthor?: (item: RssItem) => string | null;
+}) {
+  const getAuthor = opts.getAuthor ?? (() => null);
+
+  return function makeAdapter(section: FeedSection): NewsSourceAdapter {
+    const FEED_URL = opts.feedUrlFor(section);
+
+    return {
+      id: `${opts.idPrefix}-${section}-rss`,
+      async fetchBatch(): Promise<NormalizedArticle[]> {
+        const parser = new Parser<RssItem>();
+        const feed = await parser.parseURL(FEED_URL);
+
+        return (feed.items ?? [])
+          .filter(hasLinkAndTitle)
+          .map<NormalizedArticle>((i) => ({
+            externalId: i.guid || i.link,
+            url: i.link,
+            title: i.title,
+            summary: i.contentSnippet ?? null,
+            html: i.content ?? null,
+            author: getAuthor(i) ?? i.creator ?? null,
+            published: i.isoDate ? new Date(i.isoDate) : new Date(),
+            publicationSlug: opts.publicationSlug,
+            section: sectionToNormalized(section),
+            language: "en",
+            raw: i,
+          }));
+      },
+    };
+  };
+}
 
 /* ---------- Concrete RSS factories ---------- */
 
 export const makeBbcAdapter = makeRssAdapterFactory({
   publicationSlug: "bbc",
   idPrefix: "bbc",
+  // NOTE: we now use "news" instead of "top"
   feedUrlFor: (section) =>
-    section === "top"
+    section === "news"
       ? "https://feeds.bbci.co.uk/news/rss.xml"
       : section === "politics"
       ? "https://feeds.bbci.co.uk/news/politics/rss.xml"
@@ -24,21 +88,23 @@ export const makeNprAdapter = makeRssAdapterFactory({
   publicationSlug: "npr",
   idPrefix: "npr",
   feedUrlFor: (section) =>
-    section === "top"
+    section === "news"
       ? "https://feeds.npr.org/1001/rss.xml"
       : section === "politics"
       ? "https://feeds.npr.org/1014/rss.xml"
       : section === "science"
       ? "https://feeds.npr.org/1007/rss.xml"
-      : "https://feeds.npr.org/1008/rss.xml",
+      : "https://feeds.npr.org/1008/rss.xml", // culture
 });
+
+/* ---------- Guardian API adapter ---------- */
 
 /**
  * Guardian sections we care about, mapped to API paths.
- * (Top → world is a reasonable default for general news.)
+ * We treat our normalized "news" as Guardian "world".
  */
-const sectionPath: Record<FeedSection, string> = {
-  top: "world",
+const guardianPath: Record<FeedSection, string> = {
+  news: "world",
   politics: "politics",
   science: "science",
   culture: "culture",
@@ -87,24 +153,20 @@ export function makeGuardianApiAdapter(
     fromDate,
     toDate,
   } = opts;
-  console.log("GOT INTO GUARDIAN");
+
   if (!apiKey) {
-    console.log("MISSING KEY FOR GUARDIAN");
     throw new Error("Guardian API adapter requires an apiKey");
   }
 
   const base = "https://content.guardianapis.com";
-  const path = sectionPath[section];
-
+  const path = guardianPath[section]; // maps "news" -> "world", etc.
   const showFields = fields.join(",");
-  const sectionForOutput = section === "top" ? "news" : section; // keep your normalized sections
 
   return {
     id: `guardian-api-${section}`,
     async fetchBatch(): Promise<NormalizedArticle[]> {
       const all: NormalizedArticle[] = [];
 
-      // Simple bounded pagination loop
       for (let page = 1; page <= Math.max(1, maxPages); page++) {
         const url = new URL(`${base}/${path}`);
         url.searchParams.set("api-key", apiKey);
@@ -118,7 +180,6 @@ export function makeGuardianApiAdapter(
 
         const res = await fetch(url.toString(), { cache: "no-store" });
         if (!res.ok) {
-          // 429s happen on the free tier — surface a useful error
           const text = await res.text().catch(() => "");
           throw new Error(
             `Guardian API ${section} p${page} failed: ${
@@ -130,26 +191,24 @@ export function makeGuardianApiAdapter(
         const data = await res.json();
         const results: any[] = data?.response?.results ?? [];
         for (const r of results) {
-          // Map API → NormalizedArticle
           const f = r.fields ?? {};
           all.push({
-            externalId: r.id, // e.g. "world/live/2025/aug/25/..."
+            externalId: r.id,
             url: r.webUrl,
             title: r.webTitle ?? f.headline ?? "Untitled",
             summary: f.trailText ?? null,
-            html: f.body ?? null, // be mindful: this is HTML
+            html: f.body ?? null,
             author: f.byline ?? null,
             published: r.webPublicationDate
               ? new Date(r.webPublicationDate)
               : new Date(),
             publicationSlug: "guardian",
-            section: sectionForOutput,
+            section, // already normalized (news/politics/science/culture)
             language: "en",
             raw: r,
           } as NormalizedArticle);
         }
 
-        // Stop if we've reached the last page
         const current = data?.response?.currentPage;
         const total = data?.response?.pages;
         if (!current || !total || current >= total) break;

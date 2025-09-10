@@ -1,11 +1,14 @@
 import { listSubjects } from "actions/actions";
 import classes from "./subjectList.module.css";
-import type { Subject } from "actions/actions";
+import type { SubjectListItem } from "actions/actions";
 import Link from "next/link";
+import SubjectCard from "./subject-card";
 
 export default async function SubjectList() {
-  const subjects: Subject[] = await listSubjects();
-
+  const subjects: SubjectListItem[] = await listSubjects();
+  // const test = await diagCounts();
+  // const test2 = await listSubjectsRaw();
+  console.log("TEETING", subjects);
   if (!subjects.length) {
     return (
       <p className={classes.empty}>No subjects yet. Add one to get started.</p>
@@ -15,15 +18,9 @@ export default async function SubjectList() {
   return (
     <ul className={classes.list}>
       {subjects.map((s) => (
-        <Link href={`/subject-list/${s.slug}`} key={s.id}>
-          <li className={classes.item}>
-            <div className={classes.badge}>{s.type}</div>
-            <div className={classes.name}>{s.name}</div>
-            <div className={classes.meta}>
-              Created {new Date(s.createdAt).toLocaleString()}
-            </div>
-          </li>
-        </Link>
+        <div key={s.id}>
+          <SubjectCard {...s} />
+        </div>
       ))}
     </ul>
   );
